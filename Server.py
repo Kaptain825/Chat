@@ -8,24 +8,26 @@ def handle(client_socket, nicknames, sockets):
         while True:
             choice = client_socket.recv(1024).decode('utf-8')
             message = client_socket.recv(1024).decode('utf-8')
-            print(choice+" ")
-            print(message)
+            key = client_socket.recv(1024).decode('utf-8') 
             choice = int(choice)
             if 0 <= choice < len(sockets):
-                    receiver = sockets[choice]
-                    sender_nickname = nicknames[sockets.index(client_socket)]
-                    receiver.send(f"p{sender_nickname}: {message}".encode('utf-8'))
-                    client_socket.send(f"f{sender_nickname}: {message}".encode('utf-8'))
+                receiver = sockets[choice]
+                receiver.send(f"p{message}".encode('utf-8'))
+                receiver.send(key.encode('utf-8')) 
+                client_socket.send(f"f{message}".encode('utf-8'))
+                client_socket.send(key.encode('utf-8'))
             elif choice == len(sockets):
-                    broad(f"{nicknames[sockets.index(client_socket)]}: {message}".encode('utf-8'), sockets)
+                broad(f"{message}".encode('utf-8'), sockets)
+                broad(key.encode('utf-8'), sockets)  
             elif choice == 2018:
                 txt = "s"
                 i = 0
                 for x in nicknames:
-                    txt = txt+f"{i}:{x} "
-                    i=i+1
+                    txt += f"{i}:{x} "
+                    i += 1
                 txt += f"{len(nicknames)}:Everyone"
                 client_socket.send(txt.encode('utf-8'))
+                client_socket.send("0".encode('utf-8'))  
             else:
                 break
     except Exception as e:
