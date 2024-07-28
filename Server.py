@@ -6,30 +6,46 @@ lock = threading.Lock()
 def handle(client_socket, nicknames, sockets):
     try:
         while True:
-            choice = client_socket.recv(1024).decode('utf-8')
-            message = client_socket.recv(1024).decode('utf-8')
-            key = client_socket.recv(1024).decode('utf-8') 
-            choice = int(choice)
-            if 0 <= choice < len(sockets):
-                receiver = sockets[choice]
-                receiver.send(f"p{message}".encode('utf-8'))
-                receiver.send(key.encode('utf-8')) 
-                client_socket.send(f"f{message}".encode('utf-8'))
-                client_socket.send(key.encode('utf-8'))
-            elif choice == len(sockets):
-                broad(f"{message}".encode('utf-8'), sockets)
-                broad(key.encode('utf-8'), sockets)  
-            elif choice == 2018:
-                txt = "s"
-                i = 0
-                for x in nicknames:
-                    txt += f"{i}:{x} "
-                    i += 1
-                txt += f"{len(nicknames)}:Everyone"
-                client_socket.send(txt.encode('utf-8'))
-                client_socket.send("0".encode('utf-8'))  
+            full_message = client_socket.recv(1024).decode('utf-8')
+            if full_message.startswith('file|'):
+                parts = full_message.split('|')
+                if len(parts) != 4:
+                    continue
+                file_name = parts[1]
+                file_size = int(parts[2])
+                recipient_index = int(parts[3])
+                file_content = b''
+                while len(file_content) < file_size:
+                    file_content += client_socket.recv(min(file_size - len(file_content), 1024))
+                if 0 <= recipient_index < len(sockets):
+                    recipient_socket = sockets[recipient_index]
+                    recipient_socket.send(f"file|{file_name}|{file_size}".encode('utf-8'))
+                    recipient_socket.send(file_content)
+                else:
+                    broad(f"file|{file_name}|{file_size}".encode('utf-8'), sockets)
+                    broad(file_content, sockets)
             else:
-                break
+                parts = full_message.split('|')
+                if len(parts) != 3:
+                    continue
+                choice, message, key = parts
+                choice = int(choice)
+                if 0 <= choice < len(sockets):
+                    receiver = sockets[choice]
+                    receiver.send(f"p|{message}|{key}".encode('utf-8'))
+                    client_socket.send(f"f|{message}|{key}".encode('utf-8'))
+                elif choice == len(sockets):
+                    broad(f"p|{message}|{key}".encode('utf-8'), sockets)
+                elif choice == 2018:
+                    txt = "s|"
+                    i = 0
+                    for x in nicknames:
+                        txt += f"{i}:{x} "
+                        i += 1
+                    txt += f"{len(nicknames)}:Everyone|0"
+                    client_socket.send(txt.encode('utf-8'))
+                else:
+                    break
     except Exception as e:
         print("Error: ", e)
     finally:
