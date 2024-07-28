@@ -35,7 +35,7 @@ def handle(client_socket, nicknames, sockets):
                     receiver.send(f"p|{message}|{key}".encode('utf-8'))
                     client_socket.send(f"f|{message}|{key}".encode('utf-8'))
                 elif choice == len(sockets):
-                    broad(f"p|{message}|{key}".encode('utf-8'), sockets)
+                    broad(f"a|{message}|{key}".encode('utf-8'), sockets)
                 elif choice == 2018:
                     txt = "s|"
                     i = 0
