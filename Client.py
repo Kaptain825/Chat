@@ -2,7 +2,6 @@ import threading
 import socket
 import tkinter as tk
 from tkinter import scrolledtext, simpledialog, filedialog
-import random
 import os
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -40,7 +39,7 @@ def handle(socket1, text_area):
                     d_message = encrypted_message 
                 else:
                     d_message = decrypt(encrypted_message, key, iv)
-                    
+
                 if d_message:
                     text_area.config(state=tk.NORMAL)
                     if type == 'p':
