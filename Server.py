@@ -7,6 +7,7 @@ def handle(client_socket, nicknames, sockets):
     try:
         while True:
             full_message = client_socket.recv(1024).decode('utf-8')
+            print(full_message)
             if full_message.startswith('file|'):
                 parts = full_message.split('|')
                 if len(parts) != 4:
@@ -26,26 +27,28 @@ def handle(client_socket, nicknames, sockets):
                     broad(file_content, sockets)
             else:
                 parts = full_message.split('|')
-                if len(parts) != 3:
+                if len(parts) != 4:
                     continue
-                choice, message, key = parts
-                choice = int(choice)
-                if 0 <= choice < len(sockets):
-                    receiver = sockets[choice]
-                    receiver.send(f"p|{message}|{key}".encode('utf-8'))
-                    client_socket.send(f"f|{message}|{key}".encode('utf-8'))
-                elif choice == len(sockets):
-                    broad(f"a|{message}|{key}".encode('utf-8'), sockets)
-                elif choice == 2018:
-                    txt = "s|"
-                    i = 0
-                    for x in nicknames:
-                        txt += f"{i}:{x} "
-                        i += 1
-                    txt += f"{len(nicknames)}:Everyone|0"
-                    client_socket.send(txt.encode('utf-8'))
-                else:
-                    break
+                choice, message, key, iv = parts
+                print(choice,message,key,iv)
+                if choice.isdigit():
+                    choice = int(choice)
+                    if 0 <= choice < len(sockets):
+                        receiver = sockets[choice]
+                        receiver.send(f"p|{message}|{key}|{iv}".encode('utf-8'))
+                        client_socket.send(f"f|{message}|{key}|{iv}".encode('utf-8'))
+                    elif choice == len(sockets):
+                        broad(f"a|{message}|{key}|{iv}".encode('utf-8'), sockets)
+                    elif choice == 2018:
+                        txt = "s|"
+                        i = 0
+                        for x in nicknames:
+                            txt += f"{i}:{x} "
+                            i += 1
+                        txt += f"{len(nicknames)}:Everyone|0"
+                        client_socket.send(txt.encode('utf-8'))
+                    else:
+                        break
     except Exception as e:
         print("Error: ", e)
     finally:
@@ -54,6 +57,7 @@ def handle(client_socket, nicknames, sockets):
             del nicknames[i]
             del sockets[i]
             client_socket.close()
+
 
 def broad(message, sockets):
     with lock:
