@@ -36,15 +36,17 @@ def handle(socket1, text_area):
                 encrypted_message = parts[1]
                 key = parts[2]
                 iv = parts[3]
-                d_message = decrypt(encrypted_message, key, iv)
+                if type == 's':
+                    d_message = encrypted_message 
+                else:
+                    d_message = decrypt(encrypted_message, key, iv)
+                    
                 if d_message:
                     text_area.config(state=tk.NORMAL)
                     if type == 'p':
                         text_area.insert(tk.END, d_message + '\n', 'private')
                     elif type == 'f':
                         text_area.insert(tk.END, d_message + '\n', 'self')
-                    elif type == 's':
-                        text_area.insert(tk.END, d_message + '\n', 'system')
                     else:
                         text_area.insert(tk.END, d_message + '\n')
                     text_area.config(state=tk.DISABLED)
@@ -121,11 +123,9 @@ def main():
 
     root.title(f"Chat Application - {nickname}")
 
-    # Create a frame for the text area and buttons
     frame = tk.Frame(root)
     frame.grid(row=0, column=0, sticky="nsew")
 
-    # Text area for messages
     text_area = scrolledtext.ScrolledText(frame, wrap=tk.WORD, state=tk.DISABLED)
     text_area.grid(row=0, column=0, padx=20, pady=5, sticky="nsew")
 
