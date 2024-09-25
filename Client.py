@@ -2,14 +2,16 @@ import threading
 import socket
 import tkinter as tk
 from tkinter import scrolledtext, simpledialog, filedialog
+from tkinter import ttk
 import os
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 import base64
-import cx_Oracle
 
-def handle(socket1, text_area):
+last_chosen_recipient = "Everyone"  
+
+def handle(socket1, text_area, recipient_combobox):
     while True:
         try:
             message = socket1.recv(1024).decode("utf-8")
@@ -38,6 +40,8 @@ def handle(socket1, text_area):
                 iv = parts[3]
                 if type == 's':
                     d_message = encrypted_message 
+                    nicknames = extract_nicknames(d_message)
+                    recipient_combobox['values'] = nicknames + ["Everyone"]
                 else:
                     d_message = decrypt(encrypted_message, key, iv)
 
@@ -47,20 +51,22 @@ def handle(socket1, text_area):
                         text_area.insert(tk.END, d_message + '\n', 'private')
                     elif type == 'f':
                         text_area.insert(tk.END, d_message + '\n', 'self')
-                    else:
-                        text_area.insert(tk.END, d_message + '\n')
                     text_area.config(state=tk.DISABLED)
                     text_area.yview(tk.END)
-                else:
-                    break
         except Exception as e:
             print(f"Error from {socket1}: {e}")
             socket1.close()
             break
 
-def send_message(sock, choice, message, key,iv):
+def extract_nicknames(message):
+    parts = message.split('|')
+    nickname_parts = parts[1:-2]
+    nicknames = [part.split(':')[1] for part in nickname_parts]
+    return nicknames
+
+def send_message(sock, recipient, message, key, iv):
     try:
-        full_message = f"{choice}|{message}|{key}|{iv}"
+        full_message = f"{recipient}|{message}|{key}|{iv}"
         sock.send(full_message.encode("utf-8"))
     except Exception as e:
         print(f"Error sending message: {e}")
@@ -112,6 +118,8 @@ def decrypt(ciphertext, key, iv):
     return text.decode('utf-8')
 
 def main():
+    global last_chosen_recipient
+
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(('172.22.138.170', 54321))
 
@@ -131,7 +139,6 @@ def main():
 
     text_area.tag_configure('self', foreground='darkblue')
     text_area.tag_configure('private', foreground='red')
-    text_area.tag_configure('system', foreground='darkgreen')
     text_area.tag_configure('file', foreground='purple')
 
     bottom_frame = tk.Frame(root)
@@ -140,34 +147,36 @@ def main():
     message_entry = tk.Entry(bottom_frame, width=50)
     message_entry.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
-    choice_entry = tk.Entry(bottom_frame, width=10)
-    choice_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+    recipient_combobox = ttk.Combobox(bottom_frame, state="readonly")
+    recipient_combobox.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+    recipient_combobox['values'] = [last_chosen_recipient]  
+    recipient_combobox.set(last_chosen_recipient)
 
     def on_send():
+        global last_chosen_recipient
         message = message_entry.get()
         message = f"{nickname}:{message}"
-        choice = choice_entry.get()
+        recipient = recipient_combobox.get()
 
         e_message, key, iv = encrypt(message)
 
         if message.lower() == "close":
-            send_message(client_socket, choice, e_message, key, iv)
+            send_message(client_socket, recipient, e_message, key, iv)
             client_socket.close()
             root.quit()
         else:
-            send_message(client_socket, choice, e_message, key, iv)
+            send_message(client_socket, recipient, e_message, key, iv)
             message_entry.delete(0, tk.END)
-            choice_entry.delete(0, tk.END)
+            last_chosen_recipient = recipient  
 
     def on_send_file():
         file_path = filedialog.askopenfilename()
         if file_path:
-            recipient = choice_entry.get()
+            recipient = recipient_combobox.get()  
             send_file(client_socket, file_path, recipient)
-            choice_entry.delete(0, tk.END)
 
     def help1():
-        send_message(client_socket, "2018", "/help", "0")
+        send_message(client_socket, "2018", "/help", "0", "0")
 
     def set_placeholder(entry, placeholder_text):
         def on_focus_in(event):
@@ -185,16 +194,7 @@ def main():
         entry.bind('<FocusIn>', on_focus_in)
         entry.bind('<FocusOut>', on_focus_out)
 
-    bottom_frame = tk.Frame(root)
-    bottom_frame.grid(row=1, column=0, sticky="ew")
-
-    message_entry = tk.Entry(bottom_frame, width=50)
     set_placeholder(message_entry, "Type your message here...")
-    message_entry.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-
-    choice_entry = tk.Entry(bottom_frame, width=10)
-    set_placeholder(choice_entry, "Recipient ID...")
-    choice_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
     send_button = tk.Button(bottom_frame, text="Send", command=on_send)
     send_button.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
@@ -205,21 +205,10 @@ def main():
     help_button = tk.Button(bottom_frame, text="Help", command=help1)
     help_button.grid(row=1, column=2, padx=10, pady=5, sticky="ew")
 
-    corner_button = tk.Button(root, text="Log-Out", command=lambda: (client_socket.shutdown(socket.SHUT_RDWR), client_socket.close(), root.quit()))
-    corner_button.grid(row=0, column=1, padx=10, pady=10, sticky="ne")
-
     root.grid_rowconfigure(0, weight=1)
-    root.grid_rowconfigure(1, weight=0)
     root.grid_columnconfigure(0, weight=1)
-    root.grid_columnconfigure(1, weight=0)
 
-    bottom_frame.grid_rowconfigure(0, weight=1)
-    bottom_frame.grid_rowconfigure(1, weight=0)
-    bottom_frame.grid_columnconfigure(0, weight=1)
-    bottom_frame.grid_columnconfigure(1, weight=1)
-    bottom_frame.grid_columnconfigure(2, weight=1)
-
-    t1 = threading.Thread(target=handle, args=(client_socket, text_area))
+    t1 = threading.Thread(target=handle, args=(client_socket, text_area, recipient_combobox))
     t1.start()
 
     root.protocol("WM_DELETE_WINDOW", lambda: (client_socket.shutdown(socket.SHUT_RDWR), client_socket.close(), root.quit()))

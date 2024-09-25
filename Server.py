@@ -6,14 +6,15 @@ db_connection = None
 db_cursor = None
 lock = threading.Lock()
 sockets = []
+nicknames = []
 
 def connect_to_database():
     global db_connection, db_cursor
     try:
         dsn = "localhost:1521/XE" 
         db_connection = cx_Oracle.connect(
-            user="your_username",
-            password="your_password",
+            user="system",
+            password="mithun12",
             dsn=dsn,
             encoding="UTF-8"
         )
@@ -28,26 +29,40 @@ def close_database_connection():
     if db_connection:
         db_connection.close()
 
-def insert_nickname(nickname):
+def insert_or_update_nickname(nickname):
     try:
-        db_cursor.execute("INSERT INTO users (nickname) VALUES (:1)", (nickname,))
+        if nickname_exists(nickname):
+            db_cursor.execute("UPDATE users SET status = 'online' WHERE nickname = :1", (nickname,))
+        else:
+            db_cursor.execute("INSERT INTO users (nickname, status) VALUES (:1, 'online')", (nickname,))
         db_connection.commit()
     except cx_Oracle.DatabaseError as e:
-        print("Database error during insert:", e)
+        print("Database error during insert/update:", e)
         db_connection.rollback()
+
+def nickname_exists(nickname):
+    try:
+        db_cursor.execute("SELECT COUNT(*) FROM users WHERE nickname = :1", (nickname,))
+        count = db_cursor.fetchone()[0]
+        return count > 0
+    except cx_Oracle.DatabaseError as e:
+        print("Database error during select:", e)
+        return False
 
 def get_nicknames():
     try:
-        db_cursor.execute("SELECT nickname FROM users")
+        db_cursor.execute("SELECT nickname FROM users WHERE status = 'online'")
         return [row[0] for row in db_cursor.fetchall()]
     except cx_Oracle.DatabaseError as e:
-        print("Database error during retrieval:", e)
+        print("Database error during select:", e)
         return []
-    
+
 def handle(client_socket, sockets):
     try:
         while True:
             full_message = client_socket.recv(1024).decode('utf-8')
+            if not full_message:
+                break
             print(full_message)
             if full_message.startswith('file|'):
                 parts = full_message.split('|')
@@ -64,14 +79,13 @@ def handle(client_socket, sockets):
                     recipient_socket.send(f"file|{file_name}|{file_size}".encode('utf-8'))
                     recipient_socket.send(file_content)
                 else:
-                    broad(f"file|{file_name}|{file_size}".encode('utf-8'), sockets)
-                    broad(file_content, sockets)
+                    broadcast_file(f"file|{file_name}|{file_size}".encode('utf-8'), sockets)
+                    broadcast_file(file_content, sockets)
             else:
                 parts = full_message.split('|')
                 if len(parts) != 4:
                     continue
                 choice, message, key, iv = parts
-                print(choice, message, key, iv)
                 
                 if choice.isdigit():
                     choice = int(choice)
@@ -80,35 +94,46 @@ def handle(client_socket, sockets):
                         receiver.send(f"p|{message}|{key}|{iv}".encode('utf-8'))
                         client_socket.send(f"f|{message}|{key}|{iv}".encode('utf-8'))
                     elif choice == len(sockets):
-                        broad(f"a|{message}|{key}|{iv}".encode('utf-8'), sockets)
+                        broadcast_message(f"a|{message}|{key}|{iv}".encode('utf-8'), sockets)
                     elif choice == 2018:
+                        y = len(sockets)
                         nicknames = get_nicknames()
                         txt = "s|"
-                        i = 0
-                        for x in nicknames:
-                            txt += f"{i}:{x} "
-                            i += 1
-                        txt += f"{len(nicknames)}:Everyone|0"
+                        for i, x in enumerate(nicknames):
+                            txt += f"{i}:{x}|"
+                        txt += f"{len(nicknames)}:Everyone|{y}"
                         client_socket.send(txt.encode('utf-8'))
                     else:
                         break
-                    
     except Exception as e:
         print("Error:", e)
     finally:
         with lock:
-            i = sockets.index(client_socket)
-            del nicknames[i]
-            del sockets[i]
-            client_socket.close()
+            if client_socket in sockets:
+                i = sockets.index(client_socket)
+                nickname = nicknames[i]
+                del nicknames[i]
+                del sockets[i]
+                client_socket.close()
+                remove_nickname_from_database(nickname)
 
-def broad(message, sockets):
+def broadcast_message(message, sockets):
     with lock:
         for sock in sockets:
-            try:
-                sock.send(message)
-            except Exception as e:
-                print("Error:", e)
+            sock.send(message)
+
+def broadcast_file(message, sockets):
+    with lock:
+        for sock in sockets:
+            sock.send(message)
+
+def remove_nickname_from_database(nickname):
+    try:
+        db_cursor.execute("UPDATE users SET status = 'offline' WHERE nickname = :1", (nickname,))
+        db_connection.commit()
+    except cx_Oracle.DatabaseError as e:
+        print("Database error during update:", e)
+        db_connection.rollback()
 
 def main():
     connect_to_database()
@@ -118,23 +143,34 @@ def main():
     port = 54321
     server_socket.bind((host, port))
     server_socket.listen()
-    print("Server is listening...")
 
     try:
         while True:
-            client_socket, client_address = server_socket.accept()
-            print(f"{client_socket} has connected...")
+            client_socket, address = server_socket.accept()
+            print(f"Connected with {address}")
 
-            nick = client_socket.recv(1024).decode('utf-8')
+            client_socket.send("NICK".encode('utf-8'))
+            nickname = client_socket.recv(1024).decode('utf-8')
 
             with lock:
-                sockets.append(client_socket)
-                insert_nickname(nick)  
+                if nickname in nicknames:
+                    # Update existing user's status to 'online'
+                    insert_or_update_nickname(nickname)
+                    print(f"Nickname {nickname} already in use. Updated to online.")
+                else:
+                    # Add new nickname
+                    insert_or_update_nickname(nickname)
+                    nicknames.append(nickname)
+                    sockets.append(client_socket)
+                    print(f"Nickname {nickname} added to the database")
 
-            t1 = threading.Thread(target=handle, args=(client_socket, sockets))
-            t1.start()
+            client_thread = threading.Thread(target=handle, args=(client_socket, sockets))
+            client_thread.start()
+    except KeyboardInterrupt:
+        print("Shutting down server.")
     finally:
-        close_database_connection()  
+        close_database_connection()
+        server_socket.close()
 
 if __name__ == "__main__":
     main()
