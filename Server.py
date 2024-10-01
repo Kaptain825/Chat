@@ -123,8 +123,8 @@ def handle(client_socket, nicknames, sockets):
                     elif choice == 2018:  # Request for user list
                         txt = "s|"
                         for i, name in enumerate(nicknames):
-                            txt += f"{i}:{name} "
-                        txt += f"{len(nicknames)}:Everyone|0|0"
+                            txt += f"{name} "
+                        txt += f"Everyone|0|0"
                         client_socket.send(txt.encode('utf-8'))
                     elif choice == 911:  # Disconnect command
                         print(f"Disconnect command received from {client_socket}")

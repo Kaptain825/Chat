@@ -9,6 +9,9 @@ from Crypto.Util.Padding import pad, unpad
 import base64
 
 def handle(socket1, text_area):
+    # List to store nicknames
+    nicknames = []
+
     while True:
         try:
             message = socket1.recv(1024).decode("utf-8")
@@ -40,9 +43,15 @@ def handle(socket1, text_area):
                     text_area.yview(tk.END)
             
             else:
-                # Handle encrypted message
+                # Handle encrypted message or user list
                 parts = message.split('|')
                 print(f"Debug: Parts after splitting: {parts}")  # Debugging statement
+                
+                if parts[0] == 's' and len(parts) == 1:
+                    # User list received (only if parts[0] is 's' and length is 1)
+                    nicknames = parts[1].split()  # Splitting the nicknames
+                    print(f"Debug: Nicknames list: {nicknames}")  # Debugging statement
+                    continue  # Skip displaying this in the text area
                 
                 if len(parts) != 4:
                     print("Debug: Incorrect message format")  # Debugging statement
@@ -76,7 +85,7 @@ def handle(socket1, text_area):
         except Exception as e:
             print(f"Error from {socket1}: {e}")
             socket1.close()  # Close the socket on error
-            break  # Exit the loop
+            break
 
 def send_message(sock, choice, message, key, iv):
     try:
@@ -256,3 +265,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
