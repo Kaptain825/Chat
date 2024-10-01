@@ -13,56 +13,70 @@ def handle(socket1, text_area):
         try:
             message = socket1.recv(1024).decode("utf-8")
             print(f"Debug: Received message: {message}")  # Debugging statement
+            
             if message.startswith('file|'):
+                # Handle file transfer
                 parts = message.split('|')
                 file_name = parts[1]
                 file_size = int(parts[2])
                 file_content = b''
+
                 while len(file_content) < file_size:
-                    file_content += socket1.recv(min(file_size - len(file_content), 1024))
+                    # Receive the file content in chunks
+                    chunk = socket1.recv(min(file_size - len(file_content), 1024))
+                    if not chunk:  # Check for socket closure
+                        print("Debug: Connection closed while receiving file content.")
+                        return
+                    file_content += chunk
+                
                 save_path = filedialog.asksaveasfilename(initialfile=file_name)
                 if save_path:
+                    # Save the received file
                     with open(save_path, 'wb') as f:
                         f.write(file_content)
                     text_area.config(state=tk.NORMAL)
                     text_area.insert(tk.END, f'File received: {file_name}\n', 'file')
                     text_area.config(state=tk.DISABLED)
                     text_area.yview(tk.END)
+            
             else:
+                # Handle encrypted message
                 parts = message.split('|')
                 print(f"Debug: Parts after splitting: {parts}")  # Debugging statement
+                
                 if len(parts) != 4:
                     print("Debug: Incorrect message format")  # Debugging statement
-                    continue
-                type = parts[0]
+                    continue  # Skip this message and continue to the next
+
+                msg_type = parts[0]  # Renamed variable for clarity
                 encrypted_message = parts[1]
                 key = parts[2]
                 iv = parts[3]
                 
-                print(f"Debug: Type: {type}, Encrypted Message: {encrypted_message}, Key: {key}, IV: {iv}")  # Debugging statement
+                print(f"Debug: Type: {msg_type}, Encrypted Message: {encrypted_message}, Key: {key}, IV: {iv}")  # Debugging statement
                 
-                if type == 's':
-                    d_message = encrypted_message 
-                else:
-                    d_message = decrypt(encrypted_message, key, iv)
-                    
-                if d_message:
+                # Attempt decryption based on message type
+                decrypted_message = encrypted_message if msg_type == 's' else decrypt(encrypted_message, key, iv)
+
+                if decrypted_message:
                     text_area.config(state=tk.NORMAL)
-                    if type == 'p':
-                        text_area.insert(tk.END, d_message + '\n', 'private')
-                    elif type == 'f':
-                        text_area.insert(tk.END, d_message + '\n', 'self')
+                    # Insert the decrypted message into the text area based on its type
+                    if msg_type == 'p':
+                        text_area.insert(tk.END, decrypted_message + '\n', 'private')
+                    elif msg_type == 'f':
+                        text_area.insert(tk.END, decrypted_message + '\n', 'self')
                     else:
-                        text_area.insert(tk.END, d_message + '\n')
+                        text_area.insert(tk.END, decrypted_message + '\n')
                     text_area.config(state=tk.DISABLED)
                     text_area.yview(tk.END)
                 else:
                     print("Debug: Decryption failed or message is None")  # Debugging statement
-                    break
+                    continue  # Continue to the next message
+
         except Exception as e:
             print(f"Error from {socket1}: {e}")
-            socket1.close()
-            break
+            socket1.close()  # Close the socket on error
+            break  # Exit the loop
 
 def send_message(sock, choice, message, key, iv):
     try:
@@ -165,7 +179,6 @@ def main():
 
         if message.lower() == "close":
             send_message(client_socket, choice, e_message, key, iv)
-            client_socket.close()
             root.quit()
         else:
             send_message(client_socket, choice, e_message, key, iv)

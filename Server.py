@@ -30,14 +30,30 @@ def check_nickname_in_db(nickname):
 
 def update_nickname_status(nickname, status):
     """Update the nickname status in the database."""
+    connection = None
+    cursor = None
+
     try:
+        # Establish a connection to the Oracle database
         connection = cx_Oracle.connect(user, password, dsn)
         cursor = connection.cursor()
-        cursor.execute("UPDATE users SET status = :status WHERE nickname = :nickname", {"status": status, "nickname": nickname})
+        
+        # Execute the update query
+        cursor.execute(
+            "UPDATE users SET status = :status WHERE nickname = :nickname",
+            {"status": status, "nickname": nickname}
+        )
+        
+        # Commit the changes to the database
         connection.commit()
+        print(f"Successfully updated status for nickname: {nickname} to {status}")
+
     except cx_Oracle.DatabaseError as e:
         print(f"Database error: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
     finally:
+        # Ensure resources are closed properly
         if cursor:
             cursor.close()
         if connection:
@@ -110,26 +126,27 @@ def handle(client_socket, nicknames, sockets):
                             txt += f"{i}:{name} "
                         txt += f"{len(nicknames)}:Everyone|0|0"
                         client_socket.send(txt.encode('utf-8'))
-                    elif choice == 911:
-                        i = sockets.index(client_socket)
-                        del nicknames[i]
-                        del sockets[i]
-                        update_nickname_status(nicknames[i], 'Offline')  # Update the status to Offline
-                        client_socket.close()
-                        print(f"{nicknames[i]} has disconnected.")
+                    elif choice == 911:  # Disconnect command
+                        print(f"Disconnect command received from {client_socket}")
+                        break  # Exit the loop to trigger cleanup
                     else:
                         break  # Invalid choice
+
     except Exception as e:
         print("Error: ", e)
     finally:
         # Cleanup on client disconnect
         with lock:
-            i = sockets.index(client_socket)
-            del nicknames[i]
-            del sockets[i]
-            update_nickname_status(nicknames[i], 'Offline')  # Update the status to Offline
+            try:
+                i = sockets.index(client_socket)
+                nickname = nicknames[i]  # Get nickname before deletion
+                del nicknames[i]
+                del sockets[i]
+                update_nickname_status(nickname, 'Offline')  # Update the status to Offline
+                print(f"{nickname} has disconnected.")
+            except ValueError:
+                print("Socket was not found in the list.")
             client_socket.close()
-            print(f"{nicknames[i]} has disconnected.")
 
 def broad(message, sockets):
     """Broadcast a message to all connected sockets."""
