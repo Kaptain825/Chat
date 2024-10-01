@@ -126,8 +126,13 @@ def main():
     root = tk.Tk()
     root.title("Chat Application")
 
-    nickname = simpledialog.askstring("Nickname", "Enter your nickname:")
-    client_socket.send(nickname.encode("utf-8"))
+    while(True):
+        nickname = simpledialog.askstring("Nickname", "Enter your nickname:")
+        client_socket.send(nickname.encode("utf-8"))
+        req = client_socket.recv(1024).decode("utf-8")
+        print(req)  
+        if(req == "accepted"):
+            break
 
     root.title(f"Chat Application - {nickname}")
 
@@ -177,6 +182,10 @@ def main():
     def help1():
         e_help, key, iv = encrypt("/help")
         send_message(client_socket, "2018", e_help, key, iv)
+    
+    def log_out():
+        e_help, key, iv = encrypt("close")
+        send_message(client_socket,"911","close",key,iv)
 
     def set_placeholder(entry, placeholder_text):
         def on_focus_in(event):
@@ -214,7 +223,7 @@ def main():
     help_button = tk.Button(bottom_frame, text="Help", command=help1)
     help_button.grid(row=1, column=2, padx=10, pady=5, sticky="ew")
 
-    corner_button = tk.Button(root, text="Log-Out", command=lambda: (client_socket.shutdown(socket.SHUT_RDWR), client_socket.close(), root.quit()))
+    corner_button = tk.Button(root, text="Log-Out", command=lambda: (log_out(), client_socket.close(), root.quit()))
     corner_button.grid(row=0, column=1, padx=10, pady=10, sticky="ne")
 
     root.grid_rowconfigure(0, weight=1)

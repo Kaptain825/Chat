@@ -1,9 +1,62 @@
 import socket
 import threading
+import cx_Oracle
+
+# Database connection setup
+dsn = "localhost:1521/XE"
+user = "system"
+password = "mithun12"
 
 lock = threading.Lock()
 nicknames = []
 sockets = []
+
+def check_nickname_in_db(nickname):
+    """Check if the nickname is in the database and return its status."""
+    try:
+        connection = cx_Oracle.connect(user, password, dsn)
+        cursor = connection.cursor()
+        cursor.execute("SELECT status FROM users WHERE nickname = :nickname", {"nickname": nickname})
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except cx_Oracle.DatabaseError as e:
+        print(f"Database error: {e}")
+        return None
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def update_nickname_status(nickname, status):
+    """Update the nickname status in the database."""
+    try:
+        connection = cx_Oracle.connect(user, password, dsn)
+        cursor = connection.cursor()
+        cursor.execute("UPDATE users SET status = :status WHERE nickname = :nickname", {"status": status, "nickname": nickname})
+        connection.commit()
+    except cx_Oracle.DatabaseError as e:
+        print(f"Database error: {e}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def insert_nickname(nickname):
+    """Insert a new nickname into the database."""
+    try:
+        connection = cx_Oracle.connect(user, password, dsn)
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO users (nickname, status) VALUES (:nickname, 'Online')", {"nickname": nickname})
+        connection.commit()
+    except cx_Oracle.DatabaseError as e:
+        print(f"Database error: {e}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 def handle(client_socket, nicknames, sockets):
     try:
@@ -57,6 +110,13 @@ def handle(client_socket, nicknames, sockets):
                             txt += f"{i}:{name} "
                         txt += f"{len(nicknames)}:Everyone|0|0"
                         client_socket.send(txt.encode('utf-8'))
+                    elif choice == 911:
+                        i = sockets.index(client_socket)
+                        del nicknames[i]
+                        del sockets[i]
+                        update_nickname_status(nicknames[i], 'Offline')  # Update the status to Offline
+                        client_socket.close()
+                        print(f"{nicknames[i]} has disconnected.")
                     else:
                         break  # Invalid choice
     except Exception as e:
@@ -67,6 +127,7 @@ def handle(client_socket, nicknames, sockets):
             i = sockets.index(client_socket)
             del nicknames[i]
             del sockets[i]
+            update_nickname_status(nicknames[i], 'Offline')  # Update the status to Offline
             client_socket.close()
             print(f"{nicknames[i]} has disconnected.")
 
@@ -92,11 +153,25 @@ def main():
         print(f"{client_socket} has connected...")
 
         # Receive the nickname from the client
-        nick = client_socket.recv(1024).decode('utf-8')
+        while True:
+            nick = client_socket.recv(1024).decode('utf-8')
+            status = check_nickname_in_db(nick)
 
-        with lock:
-            nicknames.append(nick)
-            sockets.append(client_socket)
+            if status == 'Online':
+                client_socket.send("Nickname is already in use. Please enter a new one.".encode('utf-8'))
+            else:
+                if status == 'Offline':
+                    update_nickname_status(nick, 'Online')  # Update to Online
+                    client_socket.send("accepted".encode('utf-8'))
+                else:
+                    insert_nickname(nick)  # Insert new nickname
+                    client_socket.send("accepted".encode('utf-8'))
+
+                with lock:
+                    nicknames.append(nick)
+                    sockets.append(client_socket)
+
+                break
 
         # Start a new thread to handle the client
         t1 = threading.Thread(target=handle, args=(client_socket, nicknames, sockets))
