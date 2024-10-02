@@ -174,7 +174,7 @@ def main():
             nick = client_socket.recv(1024).decode('utf-8')
             status = check_nickname_in_db(nick)
 
-            if status == 'Online':
+            if status == 'Online' or nick == "":
                 client_socket.send("Nickname is already in use. Please enter a new one.".encode('utf-8'))
             else:
                 if status == 'Offline':
