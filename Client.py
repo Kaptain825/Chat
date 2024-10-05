@@ -95,7 +95,7 @@ def handle(socket1, text_area, combobox,nickname):
                 file_content = b''
 
                 while len(file_content) < file_size:
-                    chunk = socket1.recv(min(file_size - len(file_content), 1024))
+                    chunk = socket1.recv(min(file_size - len(file_content), 65536))
                     if not chunk:
                         print("Debug: Connection closed while receiving file content.")
                         return
@@ -172,8 +172,8 @@ def send_file(sock, file_path, recipient):
         file_name = os.path.basename(file_path)
         sock.send(f"file|{file_name}|{file_size}|{recipient}".encode("utf-8"))
         with open(file_path, 'rb') as f:
-            while chunk := f.read(1024):
-                sock.send(chunk)
+            chunk = f.read()
+            sock.sendall(chunk)
         print(f"Debug: File {file_name} sent successfully")
     except Exception as e:
         print(f"Error sending file: {e}")

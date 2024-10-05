@@ -92,13 +92,13 @@ def handle(client_socket, nicknames, sockets):
 
                 # Receive the file content
                 while len(file_content) < file_size:
-                    file_content += client_socket.recv(min(file_size - len(file_content), 1024))
+                    file_content += client_socket.recv(min(file_size - len(file_content), 65536))
 
                 # Send the file to the specified recipient
                 if 0 <= recipient_index < len(sockets):
                     recipient_socket = sockets[recipient_index]
                     recipient_socket.send(f"file|{file_name}|{file_size}".encode('utf-8'))
-                    recipient_socket.send(file_content)
+                    recipient_socket.sendall(file_content)
                 else:
                     # Broadcast the file if recipient index is invalid
                     broad(f"file|{file_name}|{file_size}".encode('utf-8'), sockets)
@@ -153,7 +153,7 @@ def broad(message, sockets):
     with lock:
         for sock in sockets:
             try:
-                sock.send(message)
+                sock.sendall(message)
             except Exception as e:
                 print("Error sending message:", e)
 
