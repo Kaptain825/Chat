@@ -10,44 +10,39 @@ import base64
 import cx_Oracle
 from datetime import datetime
 
-# Database connection setup
+#Database Setup
 dsn = "localhost:1521/XE"
 user = "system"
 password = "mithun12"
 
-# Global variable to store the last selected recipient
+#Variables to store last chosen user and to store user's nickname
 last_recipient = "Everyone"
 nickname = ""
 
 def insert_message(message, recipient):
     try:
-        # Establish database connection
         print("Debug: Attempting to connect to the database...")
-        with cx_Oracle.connect(user, password, dsn) as connection:
+        with cx_Oracle.connect(user, password, dsn) as connection: #connecting to database
             print("Debug: Successfully connected to the database.")
             cursor = connection.cursor()
-            date_time = datetime.now()
-            # Prepare the SQL statement
-            sql = "INSERT INTO messages (MESSAGE, RECIPIENT, DATE_TIME) VALUES (:message, :recipient, :date_time)"
-            # Execute the insert statement
-            cursor.execute(sql, message=message, recipient=recipient, date_time=date_time)
-            connection.commit()
+            date_time = datetime.now() #to current get date and time 
+            sql = "INSERT INTO messages (MESSAGE, RECIPIENT, DATE_TIME) VALUES (:message, :recipient, :date_time)" #insert the message along with the recipient and date and time
+            cursor.execute(sql, message=message, recipient=recipient, date_time=date_time) #executing the query
+            connection.commit() #commiting the query so it changes will be stored.
             print(f"Debug: Message inserted into database - MESSAGE: {message}, RECIPIENT: {recipient}, DATE_TIME: {date_time}")
     except cx_Oracle.DatabaseError as e:
         print(f"Database error during insert_message: {e}")
 
 def fetch_last_messages(nickname):
-    messages = []
+    messages = [] #list to store last 10 messages
     try:
-        # Establish database connection
         print("Debug: Attempting to connect to the database to fetch messages...")
         with cx_Oracle.connect(user, password, dsn) as connection:
             print("Debug: Successfully connected to the database.")
             cursor = connection.cursor()
-            # Prepare the SQL statement to fetch last 10 messages for the given recipient
-            sql = "SELECT MESSAGE, DATE_TIME FROM (SELECT MESSAGE, DATE_TIME FROM messages WHERE RECIPIENT = :recipient ORDER BY DATE_TIME DESC) WHERE ROWNUM <= 10"
+            sql = "SELECT MESSAGE, DATE_TIME FROM (SELECT MESSAGE, DATE_TIME FROM messages WHERE RECIPIENT = :recipient ORDER BY DATE_TIME DESC) WHERE ROWNUM <= 10" #query to get last 10 messages from descending order
             cursor.execute(sql, recipient=nickname)
-            messages = cursor.fetchall()
+            messages = cursor.fetchall() #fetch all messages instead of 1 by 1
             print(f"Debug: Fetched {len(messages)} messages for recipient {nickname}.")
     except cx_Oracle.DatabaseError as e:
         print(f"Database error during fetch_last_messages: {e}")
@@ -58,9 +53,9 @@ def display_last_messages(text_area, nickname):
     if messages:
         text_area.config(state=tk.NORMAL)
         print("Debug: Displaying last messages...")
-        for message_with_date in reversed(messages):  # Reverse to display oldest first
-            message,date = message_with_date
-            parts = message.split("|")
+        for message_with_date in reversed(messages):  # Reverse to display oldest firs
+            message,date = message_with_date #message splits the message and date_time to just access the message alone.
+            parts = message.split("|") #splits each message to get each part
             msg_type = parts[0] 
             encrypted_message = parts[1]
             key = parts[2]
@@ -95,16 +90,16 @@ def handle(socket1, text_area, combobox,nickname):
                 file_content = b''
 
                 while len(file_content) < file_size:
-                    chunk = socket1.recv(min(file_size - len(file_content), 65536))
+                    chunk = socket1.recv(min(file_size - len(file_content),65536)) #recieves the file data in 64kb and below chunks 
                     if not chunk:
                         print("Debug: Connection closed while receiving file content.")
                         return
-                    file_content += chunk
+                    file_content += chunk #and stitches it together
 
-                save_path = filedialog.asksaveasfilename(initialfile=file_name)
+                save_path = filedialog.asksaveasfilename(initialfile=file_name) #line to choose where to store the file
                 if save_path:
                     with open(save_path, 'wb') as f:
-                        f.write(file_content)
+                        f.write(file_content) #writes the data into a file
                     text_area.config(state=tk.NORMAL)
                     text_area.insert(tk.END, f'File received: {file_name}\n', 'file')
                     text_area.config(state=tk.DISABLED)
@@ -114,18 +109,18 @@ def handle(socket1, text_area, combobox,nickname):
                 parts = message.split('|')
                 print(f"Debug: Parts after splitting: {parts}")
 
-                if parts[0] == 's':
+                if parts[0] == 's': #if s|-|-|- then its the server giving the nicknames of users online
                     nicknames = parts[1].split()
                     print(f"Debug: Nicknames list: {nicknames}")
-                    combobox['values'] = nicknames
+                    combobox['values'] = nicknames #updates the dropdown recipient box with the online users there
                     if last_recipient in nicknames:
-                        combobox.set(last_recipient)
+                        combobox.set(last_recipient) #if the last chosen user to send message to is in user it keeps it as that user
                     else:
-                        combobox.set("Everyone")
+                        combobox.set("Everyone") #else it defaults back to Everyone
                     continue
 
-                if len(parts) != 4:
-                    print("Debug: Incorrect message format")
+                if len(parts) != 4: #all parts did not arrive
+                    print("Debug: Incorrect message format") 
                     continue
                 
                 print(f"nickname is: {nickname}\n")
@@ -141,12 +136,12 @@ def handle(socket1, text_area, combobox,nickname):
 
                 if decrypted_message:
                     text_area.config(state=tk.NORMAL)
-                    if msg_type == 'p':
-                        text_area.insert(tk.END, decrypted_message + '\n', 'private')
-                    elif msg_type == 'f':
-                        text_area.insert(tk.END, decrypted_message + '\n', 'self')
+                    if msg_type == 'p': #message type is private then 
+                        text_area.insert(tk.END, decrypted_message + '\n', 'private') #will print in red
+                    elif msg_type == 'f': #message was sent by the user
+                        text_area.insert(tk.END, decrypted_message + '\n', 'self') #will print in blue
                     else:
-                        text_area.insert(tk.END, decrypted_message + '\n')
+                        text_area.insert(tk.END, decrypted_message + '\n') #message sent to everyone and will print in black
                     text_area.config(state=tk.DISABLED)
                     text_area.yview(tk.END)
                 else:
@@ -160,20 +155,20 @@ def handle(socket1, text_area, combobox,nickname):
 
 def send_message(sock, choice, message, key, iv):
     try:
-        full_message = f"{choice}|{message}|{key}|{iv}"
+        full_message = f"{choice}|{message}|{key}|{iv}" #sends message in format
         print(f"Debug: Sending message: {full_message}")
-        sock.send(full_message.encode("utf-8"))
+        sock.send(full_message.encode("utf-8")) 
     except Exception as e:
         print(f"Error sending message: {e}")
 
 def send_file(sock, file_path, recipient):
     try:
-        file_size = os.path.getsize(file_path)
-        file_name = os.path.basename(file_path)
-        sock.send(f"file|{file_name}|{file_size}|{recipient}".encode("utf-8"))
+        file_size = os.path.getsize(file_path) #the file selected's size is taken
+        file_name = os.path.basename(file_path) #file name is taken
+        sock.send(f"file|{file_name}|{file_size}|{recipient}".encode("utf-8")) #file name is sent
         with open(file_path, 'rb') as f:
-            chunk = f.read()
-            sock.sendall(chunk)
+            chunk = f.read() #reads data in file 
+            sock.sendall(chunk) #sends all data, if the file data is large then it breaks it into chunks and sends it
         print(f"Debug: File {file_name} sent successfully")
     except Exception as e:
         print(f"Error sending file: {e}")
@@ -182,11 +177,11 @@ def encrypt(text):
     key = get_random_bytes(16)  
     iv = get_random_bytes(AES.block_size)
 
-    key_base64 = base64.b64encode(key).decode('utf-8')
-    iv_base64 = base64.b64encode(iv).decode('utf-8')
+    key_base64 = base64.b64encode(key).decode('utf-8') #to convert Bytes to Character
+    iv_base64 = base64.b64encode(iv).decode('utf-8') #to convert Bytes to Character
 
     data = text.encode('utf-8')
-    padded = pad(data, AES.block_size)
+    padded = pad(data, AES.block_size) #pads the data
 
     cipher = AES.new(key, AES.MODE_CBC, iv)
     ciphertext = cipher.encrypt(padded)
@@ -198,9 +193,9 @@ def encrypt(text):
     )
 
 def decrypt(ciphertext, key, iv):
-    key = base64.b64decode(key)
-    iv = base64.b64decode(iv)
-    ciphertext = base64.b64decode(ciphertext)
+    key = base64.b64decode(key) #converts character to Byte
+    iv = base64.b64decode(iv) #converts character to Byte
+    ciphertext = base64.b64decode(ciphertext) #converts character to Byte
 
     cipher = AES.new(key, AES.MODE_CBC, iv)
     padded = cipher.decrypt(ciphertext)
@@ -214,7 +209,7 @@ def decrypt(ciphertext, key, iv):
     return text.decode('utf-8')
 
 def main():
-    global last_recipient
+    global last_recipient #makes last_recipient as a global variable to be accessed
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(('172.22.138.170', 54321))
@@ -223,11 +218,11 @@ def main():
     root.title("Chat Application")
 
     while(True):
-        nickname = simpledialog.askstring("Nickname", "Enter your nickname:")
+        nickname = simpledialog.askstring("Nickname", "Enter your nickname:") #pop up dialouge to enter nickname
         client_socket.send(nickname.encode("utf-8"))
         req = client_socket.recv(1024).decode("utf-8")
         print(req)  
-        if(req == "accepted"):
+        if(req == "accepted"): #if server sends that the nickname is accepted then it will open the chat, else it will continue asking for nickname
             break
 
     root.title(f"Chat Application - {nickname}")
@@ -249,9 +244,9 @@ def main():
     message_entry = tk.Entry(bottom_frame, width=50)
     message_entry.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
-    nicknames = []  # Placeholder for the list of nicknames
-    selected_option = tk.StringVar(value=last_recipient)
-    combobox = ttk.Combobox(bottom_frame, textvariable=selected_option, values=nicknames)
+    nicknames = []  
+    selected_option = tk.StringVar(value=last_recipient) #the nickname that displays in the drop_down box
+    combobox = ttk.Combobox(bottom_frame, textvariable=selected_option, values=nicknames) #drop_down box
     combobox.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
     display_last_messages(text_area, nickname)
@@ -261,7 +256,7 @@ def main():
         message = message_entry.get()
         message = f"{nickname}:{message}"
         choice = combobox.current()
-        last_recipient = combobox.get()  # Store the last selected recipient
+        last_recipient = combobox.get() 
 
         e_message, key, iv = encrypt(message)
 
@@ -277,9 +272,9 @@ def main():
 
         file_path = filedialog.askopenfilename()
         if file_path:
-            choice = combobox.current()  # Fixed typo here
-            last_recipient = combobox.get()  # Store the last selected recipient
-            send_file(client_socket, file_path, choice)  # Use last_recipient directly
+            choice = combobox.current()  
+            last_recipient = combobox.get()  
+            send_file(client_socket, file_path, choice)  
 
     def help1():
         e_help, key, iv = encrypt("/help")
@@ -306,7 +301,7 @@ def main():
     root.grid_columnconfigure(0, weight=1)
     root.grid_columnconfigure(1, weight=0)
 
-    threading.Thread(target=handle, args=(client_socket, text_area, combobox, nickname), daemon=True).start()
+    threading.Thread(target=handle, args=(client_socket, text_area, combobox, nickname), daemon=True).start() #daemon threading to close the thread automatically when the chat application closes.
 
     root.mainloop()
 
